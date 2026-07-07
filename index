@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シーケンシャルURL生成・ナビゲーター</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* タップ・クリック時の操作性向上のためのスタイル */
+        .link-item:hover {
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <!-- ヘッダー -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">シーケンシャルURLナビゲーター</h1>
+            <p class="text-gray-600 mt-2">パラメータを手動で確認しながら順次アクセスするための補助ツールです。</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- 設定フォーム -->
+            <div class="bg-white p-6 rounded-lg shadow-md md:col-span-1 h-fit">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">生成設定</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">ベースURL (パラメータ前まで)</label>
+                        <input type="text" id="baseUrl" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" value="https://example.com/student/quiz_detail.php">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">パラメータ名</label>
+                        <input type="text" id="paramName" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" value="quiz_id">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">開始数値</label>
+                            <input type="number" id="startValue" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" value="24000">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">変化幅 (ステップ)</label>
+                            <input type="number" id="stepValue" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" value="5">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">生成件数</label>
+                        <input type="number" id="genCount" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" value="20" min="1" max="200">
+                    </div>
+
+                    <button id="btnGenerate" class="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition duration-150 shadow">
+                        リンク一覧を生成
+                    </button>
+                </div>
+            </div>
+
+            <!-- リンク一覧とナビゲーション -->
+            <div class="bg-white p-6 rounded-lg shadow-md md:col-span-2 flex flex-col min-h-[400px]">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b pb-4 mb-4 gap-4">
+                    <h2 class="text-lg font-semibold text-gray-700">生成されたリンク</h2>
+                    <div class="flex gap-2">
+                        <button id="btnOpenNext" class="py-1.5 px-4 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded transition duration-150 flex items-center gap-1">
+                            <span>次の未訪問を開く</span>
+                            <kbd class="hidden sm:inline bg-green-800 text-xs px-1.5 py-0.5 rounded ml-1">Space</kbd>
+                        </button>
+                        <button id="btnResetStatus" class="py-1.5 px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium rounded transition duration-150">
+                            訪問状態リセット
+                        </button>
+                    </div>
+                </div>
+
+                <!-- リンク表示エリア -->
+                <div class="flex-grow overflow-y-auto max-h-[500px]" id="linksContainer">
+                    <div class="text-center text-gray-400 py-12">
+                        「リンク一覧を生成」ボタンをクリックするとここにリンクが表示されます。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 使い方ガイド -->
+        <div class="mt-8 bg-gray-100 p-4 rounded-lg text-sm text-gray-600">
+            <h3 class="font-semibold text-gray-700 mb-1">💡 使い方ガイド</h3>
+            <ul class="list-disc list-inside space-y-1">
+                <li>左側の設定パネルに対象の「ベースURL」「パラメータ名」「開始数値」などを入力します。</li>
+                <li>「リンク一覧を生成」を押すと、指定条件に従ってURLがリストアップされます。</li>
+                <li><strong>「次の未訪問を開く」</strong>ボタンをクリックするか、キーボードの<strong>スペースキー</strong>を押すと、まだ開いていないリンクを自動的に新しいタブで開きます。</li>
+                <li>一度開いたリンクは「訪問済み」としてマークされ、視認しやすくなります。</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let generatedLinks = [];
+        let visitedStates = [];
+
+        const baseUrlInput = document.getElementById('baseUrl');
+        const paramNameInput = document.getElementById('paramName');
+        const startValueInput = document.getElementById('startValue');
+        const stepValueInput = document.getElementById('stepValue');
+        const genCountInput = document.getElementById('genCount');
+        const btnGenerate = document.getElementById('btnGenerate');
+        const btnOpenNext = document.getElementById('btnOpenNext');
+        const btnResetStatus = document.getElementById('btnResetStatus');
+        const linksContainer = document.getElementById('linksContainer');
+
+        // 初期設定の読み込み
+        btnGenerate.addEventListener('click', generateLinks);
+        btnOpenNext.addEventListener('click', openNextUnvisited);
+        btnResetStatus.addEventListener('click', resetVisitedStates);
+
+        // キーボードショートカット (スペースキーで次を開く)
+        document.addEventListener('keydown', (e) => {
+            // 入力欄にフォーカスがある時はショートカットを無効化
+            if (document.activeElement.tagName === 'INPUT') return;
+            
+            if (e.code === 'Space') {
+                e.preventDefault(); // スクロール防止
+                openNextUnvisited();
+            }
+        });
+
+        function generateLinks() {
+            const baseUrl = baseUrlInput.value.trim();
+            const paramName = paramNameInput.value.trim();
+            const startVal = parseInt(startValueInput.value, 10);
+            const stepVal = parseInt(stepValueInput.value, 10);
+            const count = parseInt(genCountInput.value, 10);
+
+            if (!baseUrl || !paramName || isNaN(startVal) || isNaN(stepVal) || isNaN(count)) {
+                alert('すべての項目を正しく入力してください。');
+                return;
+            }
+
+            generatedLinks = [];
+            visitedStates = [];
+
+            // リンクの生成
+            for (let i = 0; i < count; i++) {
+                const currentNum = startVal + (i * stepVal);
+                // URLの組み立て (既存のクエリパラメータの有無を判定)
+                const separator = baseUrl.includes('?') ? '&' : '?';
+                const fullUrl = `${baseUrl}${separator}${paramName}=${currentNum}`;
+                
+                generatedLinks.push({
+                    url: fullUrl,
+                    value: currentNum
+                });
+                visitedStates.push(false);
+            }
+
+            renderLinks();
+        }
+
+        function renderLinks() {
+            if (generatedLinks.length === 0) {
+                linksContainer.innerHTML = `
+                    <div class="text-center text-gray-400 py-12">
+                        リンクが存在しません。
+                    </div>`;
+                return;
+            }
+
+            let html = '<div class="space-y-2">';
+            generatedLinks.forEach((item, index) => {
+                const isVisited = visitedStates[index];
+                const badgeClass = isVisited 
+                    ? 'bg-green-100 text-green-800 border-green-200' 
+                    : 'bg-blue-100 text-blue-800 border-blue-200';
+                const statusText = isVisited ? '訪問済み' : '未訪問';
+                const opacityClass = isVisited ? 'opacity-60' : 'opacity-100';
+
+                html += `
+                    <div class="link-item flex items-center justify-between p-3 border rounded transition duration-150 ${opacityClass}" id="item-${index}">
+                        <div class="flex-grow mr-4 min-w-0">
+                            <span class="text-xs font-mono text-gray-400 block">ID: ${item.value}</span>
+                            <a href="${item.url}" target="_blank" onclick="markAsVisited(${index})" class="text-sm font-medium text-blue-600 hover:underline block truncate">
+                                ${item.url}
+                            </a>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <span class="text-xs px-2 py-1 rounded-full border ${badgeClass}" id="badge-${index}">
+                                ${statusText}
+                            </span>
+                            <button onclick="markAsVisited(${index})" class="text-xs py-1 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded border">
+                                チェック
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            linksContainer.innerHTML = html;
+        }
+
+        // 個別に訪問済みにする
+        window.markAsVisited = function(index) {
+            visitedStates[index] = true;
+            updateItemUI(index);
+        };
+
+        function updateItemUI(index) {
+            const itemElement = document.getElementById(`item-${index}`);
+            const badgeElement = document.getElementById(`badge-${index}`);
+            if (itemElement && badgeElement) {
+                itemElement.classList.add('opacity-60');
+                badgeElement.className = 'text-xs px-2 py-1 rounded-full border bg-green-100 text-green-800 border-green-200';
+                badgeElement.innerText = '訪問済み';
+            }
+        }
+
+        // 次の未訪問リンクを開く
+        function openNextUnvisited() {
+            const nextIndex = visitedStates.indexOf(false);
+            if (nextIndex === -1) {
+                alert('すべてのリンクを訪問しました！');
+                return;
+            }
+
+            const targetLink = generatedLinks[nextIndex];
+            
+            // 新しいタブで開く
+            window.open(targetLink.url, '_blank');
+            
+            // 状態を更新
+            markAsVisited(nextIndex);
+
+            // 開いた要素までスクロール
+            const targetEl = document.getElementById(`item-${nextIndex}`);
+            if (targetEl) {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        // リセット
+        function resetVisitedStates() {
+            visitedStates = visitedStates.map(() => false);
+            renderLinks();
+        }
+    </script>
+</body>
+</html>
